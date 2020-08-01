@@ -1,0 +1,612 @@
+
+
+
+ARM Macro Assembler    Page 1 
+
+
+    1 00000000         ; Print.s
+    2 00000000         ; Student Names: Ra'ed Asdi, Trevor Barrett
+    3 00000000         ; Last modification date: 3/30/2019
+    4 00000000         ; Runs on LM4F120 or TM4C123
+    5 00000000         ; EE319K lab 7 device driver for any LCD
+    6 00000000         ;
+    7 00000000         ; As part of Lab 7, students need to implement these LCD
+                       _OutDec and LCD_OutFix
+    8 00000000         ; This driver assumes two low-level LCD functions
+    9 00000000         ; ST7735_OutChar   outputs a single 8-bit ASCII characte
+                       r
+   10 00000000         ; ST7735_OutString outputs a null-terminated string 
+   11 00000000         
+   12 00000000         
+   13 00000000         
+   14 00000000         
+   15 00000000         
+   16 00000000                 IMPORT           ST7735_OutChar
+   17 00000000                 IMPORT           ST7735_OutString
+   18 00000000                 EXPORT           LCD_OutDec
+   19 00000000                 EXPORT           LCD_OutFix
+   20 00000000         
+   21 00000000                 AREA             |.text|, CODE, READONLY, ALIGN=
+2
+   22 00000000                 THUMB
+   23 00000000         
+   24 00000000 00000000 
+                       divcount1
+                               EQU              0           ;binding phase
+   25 00000000        4 
+                       num     RN               4
+   26 00000000        5 
+                       onum    RN               5
+   27 00000000        6 
+                       divisor RN               6
+   28 00000000        7 
+                       nnum    RN               7
+   29 00000000        8 
+                       next_num
+                               RN               8
+   30 00000000        9 
+                       divcount
+                               RN               9
+   31 00000000         
+   32 00000000         
+   33 00000000         ;-----------------------LCD_OutDec----------------------
+                       -
+   34 00000000         ; Output a 32-bit number in unsigned decimal format
+   35 00000000         ; Input: R0 (call by value) 32-bit unsigned number
+   36 00000000         ; Output: none
+   37 00000000         ; Invariables: This function must not permanently modify
+                        registers R4 to R11
+   38 00000000         LCD_OutDec
+   39 00000000 E92D 47F0       PUSH             {R4,R5,R6,R7,R8,R9,R10,LR}
+   40 00000004         ;SUB SP, #4  
+   41 00000004 F100 0000       ADD              R0, #0
+   42 00000008 2800            CMP              R0, #0
+   43 0000000A D04A            BEQ              Print2
+   44 0000000C F04F 0601       MOV              divisor, #1
+
+
+
+ARM Macro Assembler    Page 2 
+
+
+   45 00000010 4604            MOV              num, R0
+   46 00000012 4605            MOV              onum, R0
+   47 00000014 4607            MOV              nnum, R0
+   48 00000016 4680            MOV              next_num, R0
+   49 00000018 F04F 0900       MOV              divcount, #0
+   50 0000001C F04F 010A       MOV              R1, #10
+   51 00000020 F04F 0A00       MOV              R10, #0     ;allocation phase  
+                                                            
+   52 00000024         ;STR R10, [SP, #divcount1]  ;divcheck1 = 0
+   53 00000024         divcheck
+   54 00000024         
+   55 00000024         ;;ADD divcount, #0
+   56 00000024         ;;CMP divcount, #9
+   57 00000024         ;;LDR R3, [SP, #divcount1]
+   58 00000024         ;;BEQ check
+   59 00000024 462A            MOV              R2, onum
+   60 00000026 FBB2 F2F6       UDIV             R2, divisor
+   61 0000002A 2A00            CMP              R2, #0
+   62 0000002C D00D            BEQ              check
+   63 0000002E F8DD A000       LDR              R10, [SP, #divcount1] 
+                                                            ;access phase
+   64 00000032 F10A 0A01       ADD              R10, #1
+   65 00000036         ;STR R10, [SP, #divcount1]
+   66 00000036 F1BA 0F0A       CMP              R10, #10
+   67 0000003A F109 0901       ADD              divcount, #1
+   68 0000003E F1B9 0F0A       CMP              divcount, #10
+   69 00000042 D002            BEQ              check
+   70 00000044 FB06 F601       MUL              divisor, R1
+   71 00000048 E7EC            B                divcheck
+   72 0000004A         check
+   73 0000004A         
+   74 0000004A 4640            MOV              R0, next_num
+   75 0000004C F04F 010A       MOV              R1, #10
+   76 00000050 F8DD A000       LDR              R10, [SP, #divcount1] 
+                                                            ;access phase
+   77 00000054 F10A 0A00       ADD              R10, #0
+   78 00000058 F1BA 0F0A       CMP              R10, #10
+   79 0000005C F109 0900       ADD              divcount, #0
+   80 00000060 F1B9 0F0A       CMP              divcount, #10
+   81 00000064 D001            BEQ              cont
+   82 00000066 FBB6 F6F1       UDIV             divisor, R1
+   83 0000006A         cont
+   84 0000006A F04F 0900       MOV              divcount, #0
+   85 0000006E 2E01            CMP              divisor, #1
+   86 00000070 D017            BEQ              Print2
+   87 00000072 FBB8 F4F6       UDIV             num, next_num, divisor
+   88 00000076 4627            MOV              nnum, num
+   89 00000078 FB04 F406       MUL              num, divisor
+   90 0000007C EBA0 0004       SUB              R0, num
+   91 00000080 2800            CMP              R0, #0
+   92 00000082 D001            BEQ              Perfect_Division
+   93 00000084 4680            MOV              next_num, R0
+   94 00000086 E006            B                Print
+   95 00000088         
+   96 00000088         Perfect_Division
+   97 00000088 4680            MOV              next_num, R0
+   98 0000008A 4638            MOV              R0, nnum
+   99 0000008C F100 0030       ADD              R0, #0x30
+  100 00000090 F7FF FFFE       BL               ST7735_OutChar
+
+
+
+ARM Macro Assembler    Page 3 
+
+
+  101 00000094 E7D9            B                check
+  102 00000096         
+  103 00000096         Print
+  104 00000096 4638            MOV              R0, nnum
+  105 00000098 F100 0030       ADD              R0, #0x30
+  106 0000009C F7FF FFFE       BL               ST7735_OutChar
+  107 000000A0 E7D3            B                check
+  108 000000A2         Print2
+  109 000000A2 F100 0030       ADD              R0, #0x30
+  110 000000A6 F7FF FFFE       BL               ST7735_OutChar
+  111 000000AA         Done
+  112 000000AA E8BD 87F0       POP              {R4,R5,R6,R7,R8,R9,R10,PC}
+  113 000000AE         
+  114 000000AE         ;* * * * * * * * End of LCD_OutDec * * * * * * * *
+  115 000000AE         
+  116 000000AE         ; -----------------------LCD _OutFix--------------------
+                       --
+  117 000000AE         ; Output characters to LCD display in fixed-point format
+                       
+  118 000000AE         ; unsigned decimal, resolution 0.001, range 0.000 to 9.9
+                       99
+  119 000000AE         ; Inputs:  R0 is an unsigned 32-bit number
+  120 000000AE         ; Outputs: none
+  121 000000AE         ; E.g., R0=0,    then output "0.000 "
+  122 000000AE         ;       R0=3,    then output "0.003 "
+  123 000000AE         ;       R0=89,   then output "0.089 "
+  124 000000AE         ;       R0=123,  then output "0.123 "
+  125 000000AE         ;       R0=9999, then output "9.999 "
+  126 000000AE         ;       R0>9999, then output "*.*** "
+  127 000000AE         ; Invariables: This function must not permanently modify
+                        registers R4 to R11
+  128 000000AE         LCD_OutFix
+  129 000000AE         
+  130 000000AE E92D 47F0       PUSH             {R4,R5,R6,R7,R8,R9,R10,LR}
+  131 000000B2         ;SUB SP, #4  ;allocation phase
+  132 000000B2 F242 7310       MOV              R3, #10000
+  133 000000B6 FBB0 F3F3       UDIV             R3, R0, R3
+  134 000000BA 2B00            CMP              R3, #0
+  135 000000BC D80A            BHI              Stars
+  136 000000BE         ;ADD R0, #0
+  137 000000BE         ;CMP R0, #0
+  138 000000BE         ;BEQ Print2
+  139 000000BE F04F 0601       MOV              divisor, #1
+  140 000000C2 4604            MOV              num, R0
+  141 000000C4 4605            MOV              onum, R0
+  142 000000C6 4607            MOV              nnum, R0
+  143 000000C8 4680            MOV              next_num, R0
+  144 000000CA F04F 0900       MOV              divcount, #0
+  145 000000CE F04F 010A       MOV              R1, #10
+  146 000000D2 E014            B                divcheck1
+  147 000000D4         
+  148 000000D4         Stars
+  149 000000D4 F04F 002A       MOV              R0, #42
+  150 000000D8 F7FF FFFE       BL               ST7735_OutChar
+  151 000000DC F04F 002E       MOV              R0, #46
+  152 000000E0 F7FF FFFE       BL               ST7735_OutChar
+  153 000000E4 F04F 002A       MOV              R0, #42
+  154 000000E8 F7FF FFFE       BL               ST7735_OutChar
+  155 000000EC F04F 002A       MOV              R0, #42
+
+
+
+ARM Macro Assembler    Page 4 
+
+
+  156 000000F0 F7FF FFFE       BL               ST7735_OutChar
+  157 000000F4 F04F 002A       MOV              R0, #42
+  158 000000F8 F7FF FFFE       BL               ST7735_OutChar
+  159 000000FC E075            B                Fin
+  160 000000FE         
+  161 000000FE         divcheck1
+  162 000000FE         ;MOV R3, #9     
+  163 000000FE         ;STR R3, [SP, #divcount1]  ;divcheck = 0
+  164 000000FE         ;LDR R3, [SP, #divcount1]
+  165 000000FE 462A            MOV              R2, onum
+  166 00000100 FBB2 F2F6       UDIV             R2, divisor
+  167 00000104 2A00            CMP              R2, #0
+  168 00000106 D007            BEQ              Length
+  169 00000108 FB06 F601       MUL              divisor, R1
+  170 0000010C F109 0901       ADD              divcount, #1
+  171 00000110 F1B9 0F04       CMP              divcount, #4
+  172 00000114 D04F            BEQ              Four
+  173 00000116 E7F2            B                divcheck1
+  174 00000118         
+  175 00000118         Length
+  176 00000118 F1B9 0F03       CMP              divcount, #3
+  177 0000011C D01B            BEQ              Three
+  178 0000011E F1B9 0F02       CMP              divcount, #2
+  179 00000122 D024            BEQ              Two
+  180 00000124 F1B9 0F01       CMP              divcount, #1
+  181 00000128 D031            BEQ              One
+  182 0000012A E7FF            B                Zero
+  183 0000012C         
+  184 0000012C         Zero
+  185 0000012C F04F 0030       MOV              R0, #0x30
+  186 00000130 F7FF FFFE       BL               ST7735_OutChar ;print 0
+  187 00000134         Zeros
+  188 00000134 F04F 002E       MOV              R0, #46
+  189 00000138 F7FF FFFE       BL               ST7735_OutChar ;print period
+  190 0000013C F04F 0030       MOV              R0, #0x30
+  191 00000140 F7FF FFFE       BL               ST7735_OutChar ;print 0
+  192 00000144 F04F 0030       MOV              R0, #0x30
+  193 00000148 F7FF FFFE       BL               ST7735_OutChar ;print 0
+  194 0000014C F04F 0030       MOV              R0, #0x30
+  195 00000150 F7FF FFFE       BL               ST7735_OutChar ;print 0
+  196 00000154 E049            B                Fin
+  197 00000156         
+  198 00000156         Three
+  199 00000156 F04F 0030       MOV              R0, #0x30
+  200 0000015A F7FF FFFE       BL               ST7735_OutChar ;print 0
+  201 0000015E F04F 002E       MOV              R0, #46
+  202 00000162 F7FF FFFE       BL               ST7735_OutChar ;print period
+  203 00000166 4628            MOV              R0, onum
+  204 00000168 F7FF FFFE       BL               LCD_OutDec  ;print number
+  205 0000016C E03D            B                Fin
+  206 0000016E         
+  207 0000016E         Two
+  208 0000016E F04F 0030       MOV              R0, #0x30
+  209 00000172 F7FF FFFE       BL               ST7735_OutChar ;print 0
+  210 00000176 F04F 002E       MOV              R0, #46
+  211 0000017A F7FF FFFE       BL               ST7735_OutChar ;print period
+  212 0000017E F04F 0030       MOV              R0, #0x30
+  213 00000182 F7FF FFFE       BL               ST7735_OutChar ;print 0
+  214 00000186 4628            MOV              R0, onum
+
+
+
+ARM Macro Assembler    Page 5 
+
+
+  215 00000188 F7FF FFFE       BL               LCD_OutDec  ;print number
+  216 0000018C E02D            B                Fin
+  217 0000018E         
+  218 0000018E         One
+  219 0000018E F04F 0030       MOV              R0, #0x30
+  220 00000192 F7FF FFFE       BL               ST7735_OutChar ;print 0
+  221 00000196         tens
+  222 00000196 F04F 002E       MOV              R0, #46
+  223 0000019A F7FF FFFE       BL               ST7735_OutChar ;print period
+  224 0000019E         
+  225 0000019E F04F 0030       MOV              R0, #0x30
+  226 000001A2 F7FF FFFE       BL               ST7735_OutChar ;print 0
+  227 000001A6         huns
+  228 000001A6 F04F 0030       MOV              R0, #0x30
+  229 000001AA F7FF FFFE       BL               ST7735_OutChar ;print 0
+  230 000001AE 4620            MOV              R0, num
+  231 000001B0 F7FF FFFE       BL               LCD_OutDec  ;print number
+  232 000001B4 E019            B                Fin
+  233 000001B6         
+  234 000001B6         Four
+  235 000001B6 F04F 030A       MOV              R3, #10
+  236 000001BA FBB6 F6F3       UDIV             divisor, R3
+  237 000001BE FBB0 F0F6       UDIV             R0, divisor ;R0 holds thousands
+                                                             place
+  238 000001C2 FB00 F406       MUL              num, R0, divisor
+  239 000001C6 EBA5 0404       SUB              num, onum, num ;num is now rema
+                                                            inder
+  240 000001CA F7FF FFFE       BL               LCD_OutDec
+  241 000001CE 2C00            CMP              num, #0     ;if the remainder i
+                                                            s zero, meaning it'
+                                                            s 1000
+  242 000001D0 D0B0            BEQ              Zeros
+  243 000001D2 2C0A            CMP              num, #10    ;if there's a zero 
+                                                            in the tens place
+  244 000001D4 D3DF            BLO              tens
+  245 000001D6 2C64            CMP              num, #100   ;if there's a zero 
+                                                            in the hundreds pla
+                                                            ce
+  246 000001D8 D3E5            BLO              huns
+  247 000001DA F04F 002E       MOV              R0, #46
+  248 000001DE F7FF FFFE       BL               ST7735_OutChar ;draw period
+  249 000001E2 4620            MOV              R0, num
+  250 000001E4 F7FF FFFE       BL               LCD_OutDec
+  251 000001E8         
+  252 000001E8 E7FF            B                Fin
+  253 000001EA         
+  254 000001EA E8BD 87F0 
+                       Fin     POP              {R4,R5,R6,R7,R8,R9,R10,PC}
+  255 000001EE         
+  256 000001EE 00 00           ALIGN
+  257 000001F0         ;* * * * * * * * End of LCD_OutFix * * * * * * * *
+  258 000001F0         
+  259 000001F0                 ALIGN                        ; make sure the end
+                                                             of this section is
+                                                             aligned
+  260 000001F0                 END                          ; end of file
+Command Line: --debug --xref --diag_suppress=9931 --cpu=Cortex-M4 --apcs=interw
+ork --depend=.\print.d -o.\print.o -I.\RTE\_Lab7 -IC:\Keil_v5\ARM\PACK\ARM\CMSI
+S\5.5.1\CMSIS\Core\Include -IC:\Keil_v5\ARM\PACK\Keil\TM4C_DFP\1.1.0\Device\Inc
+
+
+
+ARM Macro Assembler    Page 6 
+
+
+lude\TM4C123 --predefine="__EVAL SETA 1" --predefine="__MICROLIB SETA 1" --pred
+efine="__UVISION_VERSION SETA 526" --predefine="_RTE_ SETA 1" --predefine="TM4C
+123GH6PM SETA 1" --list=.\print.lst Print.s
+
+
+
+ARM Macro Assembler    Page 1 Alphabetic symbol ordering
+Relocatable symbols
+
+.text 00000000
+
+Symbol: .text
+   Definitions
+      At line 21 in file Print.s
+   Uses
+      None
+Comment: .text unused
+Done 000000AA
+
+Symbol: Done
+   Definitions
+      At line 111 in file Print.s
+   Uses
+      None
+Comment: Done unused
+Fin 000001EA
+
+Symbol: Fin
+   Definitions
+      At line 254 in file Print.s
+   Uses
+      At line 159 in file Print.s
+      At line 196 in file Print.s
+      At line 205 in file Print.s
+      At line 216 in file Print.s
+      At line 232 in file Print.s
+      At line 252 in file Print.s
+
+Four 000001B6
+
+Symbol: Four
+   Definitions
+      At line 234 in file Print.s
+   Uses
+      At line 172 in file Print.s
+Comment: Four used once
+LCD_OutDec 00000000
+
+Symbol: LCD_OutDec
+   Definitions
+      At line 38 in file Print.s
+   Uses
+      At line 18 in file Print.s
+      At line 204 in file Print.s
+      At line 215 in file Print.s
+      At line 231 in file Print.s
+      At line 240 in file Print.s
+      At line 250 in file Print.s
+
+LCD_OutFix 000000AE
+
+Symbol: LCD_OutFix
+   Definitions
+      At line 128 in file Print.s
+   Uses
+      At line 19 in file Print.s
+Comment: LCD_OutFix used once
+Length 00000118
+
+
+
+ARM Macro Assembler    Page 2 Alphabetic symbol ordering
+Relocatable symbols
+
+
+Symbol: Length
+   Definitions
+      At line 175 in file Print.s
+   Uses
+      At line 168 in file Print.s
+Comment: Length used once
+One 0000018E
+
+Symbol: One
+   Definitions
+      At line 218 in file Print.s
+   Uses
+      At line 181 in file Print.s
+Comment: One used once
+Perfect_Division 00000088
+
+Symbol: Perfect_Division
+   Definitions
+      At line 96 in file Print.s
+   Uses
+      At line 92 in file Print.s
+Comment: Perfect_Division used once
+Print 00000096
+
+Symbol: Print
+   Definitions
+      At line 103 in file Print.s
+   Uses
+      At line 94 in file Print.s
+Comment: Print used once
+Print2 000000A2
+
+Symbol: Print2
+   Definitions
+      At line 108 in file Print.s
+   Uses
+      At line 43 in file Print.s
+      At line 86 in file Print.s
+
+Stars 000000D4
+
+Symbol: Stars
+   Definitions
+      At line 148 in file Print.s
+   Uses
+      At line 135 in file Print.s
+Comment: Stars used once
+Three 00000156
+
+Symbol: Three
+   Definitions
+      At line 198 in file Print.s
+   Uses
+      At line 177 in file Print.s
+Comment: Three used once
+Two 0000016E
+
+Symbol: Two
+
+
+
+ARM Macro Assembler    Page 3 Alphabetic symbol ordering
+Relocatable symbols
+
+   Definitions
+      At line 207 in file Print.s
+   Uses
+      At line 179 in file Print.s
+Comment: Two used once
+Zero 0000012C
+
+Symbol: Zero
+   Definitions
+      At line 184 in file Print.s
+   Uses
+      At line 182 in file Print.s
+Comment: Zero used once
+Zeros 00000134
+
+Symbol: Zeros
+   Definitions
+      At line 187 in file Print.s
+   Uses
+      At line 242 in file Print.s
+Comment: Zeros used once
+check 0000004A
+
+Symbol: check
+   Definitions
+      At line 72 in file Print.s
+   Uses
+      At line 62 in file Print.s
+      At line 69 in file Print.s
+      At line 101 in file Print.s
+      At line 107 in file Print.s
+
+cont 0000006A
+
+Symbol: cont
+   Definitions
+      At line 83 in file Print.s
+   Uses
+      At line 81 in file Print.s
+Comment: cont used once
+divcheck 00000024
+
+Symbol: divcheck
+   Definitions
+      At line 53 in file Print.s
+   Uses
+      At line 71 in file Print.s
+Comment: divcheck used once
+divcheck1 000000FE
+
+Symbol: divcheck1
+   Definitions
+      At line 161 in file Print.s
+   Uses
+      At line 146 in file Print.s
+      At line 173 in file Print.s
+
+huns 000001A6
+
+
+
+
+ARM Macro Assembler    Page 4 Alphabetic symbol ordering
+Relocatable symbols
+
+Symbol: huns
+   Definitions
+      At line 227 in file Print.s
+   Uses
+      At line 246 in file Print.s
+Comment: huns used once
+tens 00000196
+
+Symbol: tens
+   Definitions
+      At line 221 in file Print.s
+   Uses
+      At line 244 in file Print.s
+Comment: tens used once
+22 symbols
+
+
+
+ARM Macro Assembler    Page 1 Alphabetic symbol ordering
+Absolute symbols
+
+divcount1 00000000
+
+Symbol: divcount1
+   Definitions
+      At line 24 in file Print.s
+   Uses
+      At line 63 in file Print.s
+      At line 76 in file Print.s
+
+1 symbol
+
+
+
+ARM Macro Assembler    Page 1 Alphabetic symbol ordering
+External symbols
+
+ST7735_OutChar 00000000
+
+Symbol: ST7735_OutChar
+   Definitions
+      At line 16 in file Print.s
+   Uses
+      At line 100 in file Print.s
+      At line 106 in file Print.s
+      At line 110 in file Print.s
+      At line 150 in file Print.s
+      At line 152 in file Print.s
+      At line 154 in file Print.s
+      At line 156 in file Print.s
+      At line 158 in file Print.s
+      At line 186 in file Print.s
+      At line 189 in file Print.s
+      At line 191 in file Print.s
+      At line 193 in file Print.s
+      At line 195 in file Print.s
+      At line 200 in file Print.s
+      At line 202 in file Print.s
+      At line 209 in file Print.s
+      At line 211 in file Print.s
+      At line 213 in file Print.s
+      At line 220 in file Print.s
+      At line 223 in file Print.s
+      At line 226 in file Print.s
+      At line 229 in file Print.s
+      At line 248 in file Print.s
+
+ST7735_OutString 00000000
+
+Symbol: ST7735_OutString
+   Definitions
+      At line 17 in file Print.s
+   Uses
+      None
+Comment: ST7735_OutString unused
+2 symbols
+366 symbols in table
