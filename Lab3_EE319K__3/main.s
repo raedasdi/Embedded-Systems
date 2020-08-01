@@ -1,0 +1,327 @@
+;****************** main.s ***************
+; Program written by: Trevor Barrett, Raed
+; Date Created: 2/4/2017
+; Last Modified: 1/18/2019
+; Brief description of the program
+;   The LED toggles at 2 Hz and a varying duty-cycle
+; Hardware connections (External: One button and one LED)
+;  PE2 is Button input  (1 means pressed, 0 means not pressed)
+;  PE3 is LED output (1 activates external LED on protoboard)
+;  PF4 is builtin button SW1 on Launchpad (Internal) 
+;        Negative Logic (0 means pressed, 1 means not pressed)
+; Overall functionality of this system is to operate like this
+;   1) Make PE3 an output and make PE2 and PF4 inputs.
+;   2) The system starts with the the LED toggling at 2Hz,
+;      which is 2 times per second with a duty-cycle of 30%.
+;      Therefore, the LED is ON for 150ms and off for 350 ms.
+;   3) When the button (PE1) is pressed-and-released increase
+;      the duty cycle by 20% (modulo 100%). Therefore for each
+;      press-and-release the duty cycle changes from 30% to 70% to 70%
+;      to 90% to 10% to 30% so on
+;   4) Implement a "breathing LED" when SW1 (PF4) on the Launchpad is pressed:
+;      a) Be creative and play around with what "breathing" means.
+;         An example of "breathing" is most computers power LED in sleep mode
+;         (e.g., https://www.youtube.com/watch?v=ZT6siXyIjvQ).
+;      b) When (PF4) is released while in breathing mode, resume blinking at 2Hz.
+;         The duty cycle can either match the most recent duty-
+;         cycle or reset to 30%.
+;      TIP: debugging the breathing LED algorithm using the real board.
+; PortE device registers
+GPIO_PORTE_DATA_R  EQU 0x400243FC
+GPIO_PORTE_DIR_R   EQU 0x40024400
+GPIO_PORTE_AFSEL_R EQU 0x40024420
+GPIO_PORTE_DEN_R   EQU 0x4002451C
+; PortF device registers
+GPIO_PORTF_DATA_R  EQU 0x400253FC
+GPIO_PORTF_DIR_R   EQU 0x40025400
+GPIO_PORTF_AFSEL_R EQU 0x40025420
+GPIO_PORTF_PUR_R   EQU 0x40025510
+GPIO_PORTF_DEN_R   EQU 0x4002551C
+GPIO_PORTF_LOCK_R  EQU 0x40025520
+GPIO_PORTF_CR_R    EQU 0x40025524
+GPIO_LOCK_KEY      EQU 0x4C4F434B  ; Unlocks the GPIO_CR register
+SYSCTL_RCGCGPIO_R  EQU 0x400FE608
+count 			   EQU 0xA9054
+countinc		   EQU 0x1520A8
+count10			   EQU 0xA90
+count20			   EQU 0x1520
+count30			   EQU 0x1FB0;2
+count40			   EQU 0x2A40
+count50			   EQU 0x34D1
+count60			   EQU 0x3F61
+count70			   EQU 0x49F2
+count80			   EQU 0x5481
+count90			   EQU 0x5F12
+countShort		   EQU 0x30D40   ;200000,	10% of 2,000,000
+countLong 		   EQU 0x1B7740	   ;180000, 90% of 2,000,000
+countAdd           EQU 0x61A80    ;400000, 20% of 2,000,000
+countMinus		   EQU 0xFFF9E580  ;-400000, -20% of 2,000,000
+countNeg		   EQU 0xFFE488C0  ;-180000
+
+       IMPORT  TExaS_Init
+       THUMB
+       AREA    DATA, ALIGN=2
+;global variables go here
+		
+
+       AREA    |.text|, CODE, READONLY, ALIGN=2
+       THUMB
+       EXPORT  Start
+Start
+ ; TExaS_Init sets bus clock at 80 MHz
+     BL  TExaS_Init ; voltmeter, scope on PD3
+ ; Initialization goes here
+	LDR R6, =countShort				;making R2 the short delay length number
+	LDR R7, =countLong
+	LDR R1, =SYSCTL_RCGCGPIO_R		;start clock for port E
+	LDR R0, [R1]
+	ORR R0, R0, #0x30
+	STR R0, [R1]
+	NOP
+	NOP
+	LDR R1, =GPIO_PORTE_DIR_R		;set PE3 as an output, PE2 as an input
+	LDR R0, [R1]
+	ORR R0, R0, #0x08
+	STR R0, [R1]
+	LDR R1, =GPIO_PORTE_DEN_R		;enable digital I/O for PE2, PE3
+	LDR R0, [R1]
+	ORR R0, R0, #0x0F
+	STR R0, [R1]
+	LDR R1, =GPIO_PORTF_DIR_R		;set PF4 as input
+	MOV R0, #0x00
+	STR R0, [R1]
+	LDR R1, =GPIO_PORTF_DEN_R		;enable digital I/O for PF4
+	LDR R0, [R1]
+	ORR R0, #0x10
+	STR R0, [R1]
+	LDR R0, =GPIO_LOCK_KEY
+	LDR R1, =GPIO_PORTF_LOCK_R
+	STR R0, [R1]
+	LDR R0, =GPIO_PORTF_CR_R
+	LDR R1, [R0]
+	ORR R1, #0xFF
+	STR R1, [R0]
+	LDR R0, =GPIO_PORTF_PUR_R
+	LDR R1, [R0]
+	ORR R1, #0x10
+	STR R1, [R0]
+	
+	
+	B loop
+
+SWITCH
+		
+		LDR R1, =GPIO_PORTE_DATA_R	;continually checks if button is pressed
+		LDR R0, [R1]				;once button is released, count is incremented
+		AND R0, #0x04
+		ROR R0, #2
+		CMP R0, #1
+		BEQ SWITCH
+		LDR R0, =countNeg			;checks to see if the short delay number has become
+		ADD R0, R6, R0
+		CMP R0, #0
+		BEQ reset					;90%, which means that the duty cycle must reset to	short delay being 10%
+		LDR R4, =countAdd			;adding 20% to the shorter delay, R2
+		LDR R5, =countMinus			;subtracting 20% from the long delay R3
+		ADD R6, R6, R4
+		ADD R7, R7, R5
+		B cont
+reset	LDR R6, =countShort				
+		LDR R7, =countLong
+cont	BX LR
+
+LongDelay	
+		ADD R5, R7, #0
+Loop1	
+		LDR R1, =GPIO_PORTF_DATA_R	;continually checks if button is pressed
+		LDR R0, [R1]				;once button is released, count is incremented
+		AND R0, #0x10
+		ROR R0, #4
+		CMP R0, #0
+		BEQ Breathe
+		LDR R1, =GPIO_PORTE_DATA_R	;checks if buttons is pressed,
+		LDR R0, [R1]				;branches to SWITCH if button is pressed
+		AND R0, #0x04
+		ROR R0, #2
+		CMP R0, #1					
+		BEQ SWITCH	
+		SUBS R5,R5,#0x01
+		BNE Loop1
+		BX LR
+		
+ShortDelay	
+		ADD R4, R6, #0
+Loop2	
+		LDR R1, =GPIO_PORTF_DATA_R	;continually checks if button is pressed
+		LDR R0, [R1]				;once button is released, count is incremented
+		AND R0, #0x10
+		ROR R0, #4
+		CMP R0, #0
+		BEQ Breathe
+		LDR R1, =GPIO_PORTE_DATA_R	;checks if buttons is pressed,
+		LDR R0, [R1]				;branches to SWITCH if button is pressed
+		AND R0, #0x04
+		ROR R0, #2
+		CMP R0, #1					
+		BEQ SWITCH	
+		SUBS R4,R4,#0x01
+		BNE Loop2
+		BX LR
+		
+
+Breathe
+; This loop cycles through duty cycles at a rate
+; such that the LED appears to 'breathe'
+; in testing the breathing function was most smooth
+; when LED was started as ON which is why the loop
+; first toggles on the LED
+; In this loop R5 serves as a loop counter so that the
+; LED stays at a certain duty cycle for a longer time
+; making the breathe more noticable
+; R3 holds the count that keeps the light ON
+; R4 holds the count that keeps the light OFF
+		LDR R1, =GPIO_PORTE_DATA_R		;toggle LED on
+		LDR R0, [R1]
+		ORR R0, R0, #0x08
+		STR R0, [R1]
+		;10% duty cycle
+		MOV R5, #10
+		LDR R3, =count10
+		LDR R4, =count90
+		BL breath
+		;20% duty cycle
+		MOV R5, #10
+		LDR R3, =count20
+		LDR R4, =count80
+		BL breath
+		;30% duty cycle
+		MOV R5, #10
+		LDR R3, =count30
+		LDR R4, =count70
+		BL breath
+		;40% duty cycle
+		MOV R5, #10
+		LDR R3, =count40
+		LDR R4, =count60
+		BL breath
+		;50% duty cycle
+		MOV R5, #10
+		LDR R3, =count50
+		LDR R4, =count50
+		BL breath
+		;60% duty cycle
+		MOV R5, #10
+		LDR R3, =count60
+		LDR R4, =count40
+		BL breath
+		;70% duty cycle
+		MOV R5, #10
+		LDR R3, =count70
+		LDR R4, =count30
+		BL breath
+		;80% duty cycle
+		MOV R5, #10
+		LDR R3, =count80
+		LDR R4, =count20
+		BL breath
+		;90% duty cycle
+		MOV R5, #20
+		LDR R3, =count90
+		LDR R4, =count10
+		BL breath
+		;80% duty cycle
+		MOV R5, #10
+		LDR R3, =count80
+		BL breath
+		;70% duty cycle
+		MOV R5, #10
+		LDR R3, =count70
+		BL breath
+		;60% duty cycle
+		MOV R5, #10
+		LDR R3, =count60
+		BL breath
+		;50% duty cycle
+		MOV R5, #10
+		LDR R3, =count50
+		BL breath
+		;40% duty cycle
+		MOV R5, #10
+		LDR R3, =count40
+		BL breath
+		;30% duty cycle
+		MOV R5, #10
+		LDR R3, =count30
+		BL breath
+		;20% duty cycle
+		MOV R5, #10
+		LDR R3, =count20
+		BL breath
+		;10% duty cycle
+		MOV R5, #10
+		LDR R3, =count10
+		BL breath
+		B Breathe
+
+breath	LDR R1, =GPIO_PORTE_DATA_R		;toggle LED on
+		LDR R0, [R1]
+		EOR R0, R0, #0x08
+		STR R0, [R1]
+		ADD R2, R3, #0
+again	LDR R1, =GPIO_PORTF_DATA_R	;checks if buttons is pressed,
+		LDR R0, [R1]				;branches to loop if button is realeased thus resuming regular blinking
+		AND R0, #0x10
+		ROR R0, #4
+		CMP R0, #0
+		BNE loop	
+		;delay to keep LED on
+		SUBS R2,R2,#0x01
+		CMP R2, #0
+		BNE again
+		
+		LDR R1, =GPIO_PORTE_DATA_R		;toggle LED off
+		LDR R0, [R1]
+		EOR R0, R0, #0x08
+		STR R0, [R1]
+		ADD R2, R4, #0
+again2	LDR R1, =GPIO_PORTF_DATA_R	;checks if buttons is pressed,
+		LDR R0, [R1]				;branches to SWITCH if button is pressed
+		AND R0, #0x10
+		ROR R0, #4
+		CMP R0, #0
+		BNE loop	
+		;delay to keep LED off
+		SUBS R2,R2,#0x01
+		CMP R2, #0
+		BNE again2
+		;overall loop counter
+		SUBS R5, R5, #1
+		CMP R5, #0
+		BNE breath
+
+		BX LR
+	
+
+     CPSIE  I    ; TExaS voltmeter, scope runs on interrupts
+loop  
+
+	LDR R1, =GPIO_PORTE_DATA_R		;toggle LED on
+	LDR R0, [R1]
+	EOR R0, R0, #0x08
+	STR R0, [R1]
+	
+	BL ShortDelay						;delay keeps LED on
+	
+	LDR R1, =GPIO_PORTE_DATA_R		;toggle LED (off)
+	LDR R0, [R1]
+	EOR R0, R0, #0x08
+	STR R0, [R1]
+	
+	BL LongDelay						;delay keeps LED off
+	
+     B    loop
+
+      
+     ALIGN      ; make sure the end of this section is aligned
+     END        ; end of file
+
